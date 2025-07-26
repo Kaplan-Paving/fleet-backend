@@ -1,0 +1,40 @@
+# Dependencies
+# Ignore the node_modules folder, which can be regenerated from package-lock.json
+/node_modules
+
+# Environment Variables
+# Ignore all .env files to keep sensitive credentials private
+.env
+.env.*
+!.env.example
+
+# Logs
+# Ignore log files that are generated during development or on the server
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Build & Output
+# Ignore compiled or built output folders
+/dist
+/build
+/.output
+/.next
+
+# Coverage reports
+/coverage
+
+# Optional Editor & OS files
+# Ignore metadata files from common code editors and operating systems
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
