@@ -128,10 +128,10 @@ export const logout = (req, res) => {
 
     // The options here MUST be identical to the login function's options
     res.cookie('token', '', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/', // ✅ Crucial: This must match the login path
+        httpOnly: true, // Prevents client-side JS from accessing the cookie
+        secure: true,
+        sameSite: 'None',
+        path: '/',// Helps prevent CSRF attacks
         expires: new Date(0)
     });
 
