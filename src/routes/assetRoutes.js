@@ -7,14 +7,14 @@ import {
     deleteAsset
 } from '../controllers/assetController.js';
 import { checkPermission } from '../middlewares/checkPermission.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
 // Permissions required for each operation
-router.post('/', createAsset);
-router.get('/', getAllAssets);
-router.get('/:id', checkPermission(['view_asset']), getAssetById);
-router.put('/:id', checkPermission(['edit_asset']), updateAsset);
-router.delete('/:id', checkPermission(['delete_asset']), deleteAsset);
+router.post('/', protect, createAsset);
+router.get('/', protect, getAllAssets);
+router.get('/:id', protect, checkPermission(['view_asset']), getAssetById);
+router.put('/:id', protect, checkPermission(['edit_asset']), updateAsset);
+router.delete('/:id', protect, checkPermission(['delete_asset']), deleteAsset);
 
 export default router;

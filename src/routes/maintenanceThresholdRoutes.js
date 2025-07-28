@@ -6,13 +6,13 @@ import {
     deleteThreshold
 } from '../controllers/maintenanceThresholdController.js';
 import { checkPermission } from '../middlewares/checkPermission.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
 // Only Admin can create/update/delete
-router.post('/', checkPermission('admin'), createThreshold);
-router.put('/:id', checkPermission('admin'), updateThreshold);
-router.delete('/:id', checkPermission('admin'), deleteThreshold);
+router.post('/', protect, checkPermission('admin'), createThreshold);
+router.put('/:id', protect, checkPermission('admin'), updateThreshold);
+router.delete('/:id', protect, checkPermission('admin'), deleteThreshold);
 
 // Anyone authenticated can view
 router.get('/', getAllThresholds);

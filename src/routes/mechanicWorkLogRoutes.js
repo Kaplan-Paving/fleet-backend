@@ -6,12 +6,12 @@ import {
     deleteWorkLog,
     getWorkLogs
 } from '../controllers/mechanicWorkLogController.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
-router.post('/', createWorkLog);
-router.get('/', getWorkLogs);             // ?mechanic.userId=...&kaplanUnit=...
-router.put('/:id', updateWorkLog);
-router.delete('/:id', deleteWorkLog);
+router.post('/', protect, createWorkLog);
+router.get('/', protect, getWorkLogs);             // ?mechanic.userId=...&kaplanUnit=...
+router.put('/:id', protect, updateWorkLog);
+router.delete('/:id', protect, deleteWorkLog);
 
 export default router;

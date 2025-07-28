@@ -5,7 +5,7 @@ import User from '../models/User.js'; // 1. Import your User model
  * Middleware to verify JWT from an HttpOnly cookie and attach user to the request.
  * This is the primary middleware for session-based web authentication.
  */
-export const verifyToken = async (req, res, next) => {
+export const protect = async (req, res, next) => {
     // 2. Read the token from the 'token' cookie instead of the Authorization header
     const token = req.cookies.token;
 
@@ -48,3 +48,4 @@ export const authorizeRoles = (...roles) => {
         next();
     };
 };
+

@@ -1,11 +1,11 @@
 // src/routes/s3Routes.js
 import express from 'express';
 import { generateUploadUrl, generateDownloadUrl } from '../services/s3Service.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
 // Request pre-signed upload URL
-router.get('/upload-url', async (req, res) => {
+router.get('/upload-url', protect, async (req, res) => {
     try {
         const { uploadUrl, fileKey } = await generateUploadUrl();
         res.json({ uploadUrl, fileKey });

@@ -5,11 +5,11 @@ import {
     updateWorkOrder,
     deleteWorkOrder
 } from '../controllers/workOrderController.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
-router.post('/', createWorkOrder);        // Create
-router.put('/:id', updateWorkOrder);      // Update
-router.delete('/:id', deleteWorkOrder);   // Delete
+router.post('/', protect, createWorkOrder);        // Create
+router.put('/:id', protect, updateWorkOrder);      // Update
+router.delete('/:id', protect, deleteWorkOrder);   // Delete
 
 export default router;

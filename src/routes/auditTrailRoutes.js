@@ -1,11 +1,11 @@
 // routes/auditTrailRoutes.js
 import express from 'express';
 import AuditTrail from '../models/AuditTrail.js';
-
+import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
 // GET /api/audit-trail?user=xyz&limit=20
-router.get('/', async (req, res) => {
+router.get('/', protect, async (req, res) => {
     try {
         const filter = {};
         if (req.query.user) {
