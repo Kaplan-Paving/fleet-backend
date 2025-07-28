@@ -22,7 +22,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 const corsOptions = {
-    origin: 'http://localhost:5173', // Your frontend's address
+    origin: 'https://fleet.kaplanpaving.com', // Your frontend's address
     credentials: true, // This allows the server to accept cookies from the browser
 };
 
