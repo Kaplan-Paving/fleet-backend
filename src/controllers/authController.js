@@ -100,8 +100,8 @@ export const login = async (req, res) => {
         // 5. Set the token in a secure, HttpOnly cookie (BEST PRACTICE)
         res.cookie('token', token, {
             httpOnly: true, // Prevents client-side JS from accessing the cookie
-            secure: process.env.NODE_ENV === 'production', // Only send over HTTPS in production
-            sameSite: 'strict',
+            secure: true,
+            sameSite: 'None',
             path: '/',// Helps prevent CSRF attacks
             maxAge: 24 * 60 * 60 * 1000 // 1 day in milliseconds
         });
