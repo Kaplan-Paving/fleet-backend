@@ -102,6 +102,7 @@ export const login = async (req, res) => {
             httpOnly: true, // Prevents client-side JS from accessing the cookie
             secure: true,
             sameSite: 'None',
+            partitioned: true,
             path: '/',// Helps prevent CSRF attacks
             maxAge: 24 * 60 * 60 * 1000 // 1 day in milliseconds
         });
@@ -131,6 +132,7 @@ export const logout = (req, res) => {
         httpOnly: true, // Prevents client-side JS from accessing the cookie
         secure: true,
         sameSite: 'None',
+        partitioned: true,
         path: '/',// Helps prevent CSRF attacks
         expires: new Date(0)
     });
