@@ -12,7 +12,7 @@ const router = express.Router();
 const upload = multer();
 
 // ... (your existing POST, GET, DELETE routes)
-router.post('/', protect, upload.array('attachments', 5), createRepairTicket);
+router.post('/', upload.array('attachments', 5), createRepairTicket);
 router.get('/', protect, getAllRepairTickets);
 router.delete('/:id', protect, deleteRepairTicket);
 

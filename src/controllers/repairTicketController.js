@@ -1,20 +1,22 @@
 import RepairTicket from '../models/RepairTicket.js';
-
+import WorkOrder from '../models/WorkOrder.js';
 // --- (UPDATED) Create a new repair ticket ---
+/**
+ * @desc    Create a new repair ticket and a corresponding work order.
+ * If a work order for the Kaplan Unit already exists, the new
+ * work order will reuse the existing workOrderId for grouping.
+ * @route   POST /api/tickets (or a dedicated route)
+ * @access  Private
+ */
 export const createRepairTicket = async (req, res) => {
-    // 1. Destructure the expected fields from the multipart form body
-    console.log('--- INSIDE CONTROLLER ---');
-    console.log('Request Body:', req.body);
-    console.log('Request Files:', req.files);
     const { kaplanUnitNo, issueDescription, reason, priority, ticketStatus } = req.body;
 
-    // 2. Add robust validation for required fields from the modal
     if (!kaplanUnitNo || !issueDescription || !reason || !priority) {
         return res.status(400).json({ message: 'Please fill all required fields: Kaplan Unit, Issue Description, Reason, and Priority.' });
     }
 
     try {
-        // --- Ticket Number Generation ---
+        // --- Part A: Create the Repair Ticket ---
         const today = new Date();
         const datePart = today.toISOString().split('T')[0].replace(/-/g, '');
         const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
@@ -23,41 +25,70 @@ export const createRepairTicket = async (req, res) => {
         const kaplanShort = kaplanUnitNo.slice(-4).toUpperCase().padStart(4, 'X');
         const ticketNumber = `TCKT-${datePart}-${kaplanShort}-${countPart}`;
 
-        // --- Priority Rank Generation ---
         const highestPriorityTicket = await RepairTicket.findOne().sort({ priorityRank: -1 });
         const nextPriorityRank = highestPriorityTicket ? highestPriorityTicket.priorityRank + 1 : 1;
 
-        // --- Handle Attachments ---
         const attachments = req.files?.map(file => ({
-            url: file.location, // This assumes you are using multer-s3. For local storage, it would be `file.path`
+            url: file.location,
             key: file.key,
             originalName: file.originalname,
             mimetype: file.mimetype,
             size: file.size
         })) || [];
 
-        // 3. Create the new ticket using the validated and generated data
         const newTicket = new RepairTicket({
             ticketNumber,
             priorityRank: nextPriorityRank,
             kaplanUnitNo,
             issueDescription,
-            ticketStatus: ticketStatus || 'Under Diagnosis', // Use status from body or default
+            ticketStatus: ticketStatus || 'Under Diagnosis',
             reason,
             priority,
             attachments,
-            date: new Date() // Set the date explicitly
+            date: new Date()
         });
-
         const savedTicket = await newTicket.save();
+
+        // --- Part B: Create a NEW Work Order, reusing workOrderId if applicable ---
+        let workOrderIdToUse;
+
+        // Find an existing work order for the same unit to copy its ID
+        const existingWorkOrder = await WorkOrder.findOne({ kaplanUnitNo: savedTicket.kaplanUnitNo });
+
+        if (existingWorkOrder && existingWorkOrder.workOrderId) {
+            // If one exists, reuse its workOrderId for grouping
+            workOrderIdToUse = existingWorkOrder.workOrderId;
+        } else {
+            // If none exists, generate a new workOrderId
+            const highestWorkOrder = await WorkOrder.findOne().sort({ workOrderId: -1 });
+            workOrderIdToUse = highestWorkOrder ? (highestWorkOrder.workOrderId || 0) + 1 : 1001; // Start from 1001
+        }
+
+        // Determine the next priority rank for the new work order
+        const highestRank = await WorkOrder.findOne().sort({ priorityRank: -1 });
+        const nextWorkOrderRank = highestRank ? highestRank.priorityRank + 1 : 1;
+
+        // Create the new work order document
+        const newWorkOrder = new WorkOrder({
+            // ✅ FIX: Changed 'ticketNumber' to the correct field name 'workOrderId'
+            workOrderId: workOrderIdToUse,
+            kaplanUnitNo: savedTicket.kaplanUnitNo,
+            description: savedTicket.issueDescription,
+            priority: savedTicket.priority,
+            priorityRank: nextWorkOrderRank,
+            ticketIds: [savedTicket._id] // Link only the new ticket
+        });
+        await newWorkOrder.save();
+
+        // Respond with the successfully created ticket
         res.status(201).json(savedTicket);
+
     } catch (error) {
-        console.error('Failed to create repair ticket:', error);
-        // Provide more specific error feedback
+        console.error('Failed to create repair ticket and/or work order:', error);
         if (error.name === 'ValidationError') {
             return res.status(400).json({ message: 'Validation Error', errors: error.errors });
         }
-        res.status(500).json({ message: 'Server error while creating ticket.' });
+        res.status(500).json({ message: 'Server error while creating ticket/work order.' });
     }
 };
 
@@ -115,23 +146,45 @@ export const updateRepairTicket = async (req, res) => {
 export const deleteRepairTicket = async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Step 1: Find the ticket to be deleted to get its rank
         const ticketToDelete = await RepairTicket.findById(id);
         if (!ticketToDelete) {
             return res.status(404).json({ message: 'Ticket not found' });
         }
         const deletedRank = ticketToDelete.priorityRank;
+
+        // Step 2: Delete the actual repair ticket
         await RepairTicket.findByIdAndDelete(id);
+
+        // Step 3: Re-rank all tickets that had a higher priority
         await RepairTicket.updateMany(
             { priorityRank: { $gt: deletedRank } },
             { $inc: { priorityRank: -1 } }
         );
-        res.status(200).json({ message: 'Ticket deleted and ranks updated successfully' });
+
+        // Step 4 (UPDATED): Find the associated work order and decide whether to update or delete it
+        const associatedWorkOrder = await WorkOrder.findOne({ ticketIds: id });
+
+        if (associatedWorkOrder) {
+            if (associatedWorkOrder.ticketIds.length === 1) {
+                // If this is the only ticket, delete the entire work order
+                await WorkOrder.findByIdAndDelete(associatedWorkOrder._id);
+            } else {
+                // If there are other tickets, just remove the reference to this one
+                await WorkOrder.findByIdAndUpdate(
+                    associatedWorkOrder._id,
+                    { $pull: { ticketIds: id } }
+                );
+            }
+        }
+
+        res.status(200).json({ message: 'Ticket deleted and associated work order managed successfully' });
     } catch (error) {
         console.error('Failed to delete ticket:', error);
         res.status(500).json({ message: 'Failed to delete ticket', error });
     }
 };
-
 export const updateTicketRanks = async (req, res) => {
     try {
         // Expect an array of objects like [{ _id: '...', priorityRank: 1 }, ...]

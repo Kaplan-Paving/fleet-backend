@@ -1,26 +1,19 @@
-// models/WorkOrder.js
 import mongoose from 'mongoose';
 
 const workOrderSchema = new mongoose.Schema({
     workOrderId: Number,
-    kaplanUnit: { type: String, required: true },
+    kaplanUnitNo: { type: String, required: true },
     description: String,
     priority: { type: String, enum: ['Critical', 'High', 'Normal', 'Low'] },
     priorityRank: Number,
     serviceType: String,
     serviceSubType: String,
-
     assignedTechnician: {
         name: String,
         technicianId: mongoose.Schema.Types.ObjectId // ref: 'User'
     },
-
-    ticketIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ticket' }],
-    ticketStatus: String,
-    reason: String,
-
+    ticketIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'RepairTicket' }],
     totalLabourHours: Number,
-
     timeIn: Date,
     timeOut: Date,
     dropOffDate: Date,
@@ -28,7 +21,6 @@ const workOrderSchema = new mongoose.Schema({
     partsOrderDate: Date,
     partsDeliveryDate: Date,
     repairCompletionDate: Date,
-
     complaint: String,
     cause: String,
     correction: String,

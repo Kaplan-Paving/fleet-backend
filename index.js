@@ -63,7 +63,7 @@ app.use(requestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/readings', readingRoutes);
-app.use('/api/maintenanceThresholdRoutes', maintenanceThresholdRoutes);
+app.use('/api/maintenanceThreshold', maintenanceThresholdRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/repair-tickets', repairTicketRoutes);
 app.use('/api/s3', s3Routes);
