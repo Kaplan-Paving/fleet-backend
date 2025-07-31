@@ -8,6 +8,7 @@ import {
     // ... import your other controllers
 } from '../controllers/repairTicketController.js';
 import { protect } from '../middlewares/auth.js';
+import { searchTickets, updateTicketStatus /*, other controllers */ } from '../controllers/repairTicketController.js';
 const router = express.Router();
 const upload = multer();
 
@@ -15,7 +16,8 @@ const upload = multer();
 router.post('/', upload.array('attachments', 5), createRepairTicket);
 router.get('/', protect, getAllRepairTickets);
 router.delete('/:id', protect, deleteRepairTicket);
-
+router.get('/search', searchTickets);
+router.put('/:id/status', updateTicketStatus);
 
 // 2. Add the new route for updating ranks
 router.put('/ranks', protect, updateTicketRanks);

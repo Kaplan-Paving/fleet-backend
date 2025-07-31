@@ -151,3 +151,58 @@ export const updateTicketRanks = async (req, res) => {
         res.status(500).json({ message: 'Server error while updating ranks.' });
     }
 };
+
+
+/**
+ * @desc    Search for tickets by ticket number or description
+ * @route   GET /api/repair-tickets/search?q=...
+ * @access  Private
+ */
+export const searchTickets = async (req, res) => {
+    try {
+        const query = req.query.q;
+        if (!query) {
+            return res.status(200).json([]);
+        }
+
+        const searchRegex = new RegExp(query, 'i');
+        const tickets = await RepairTicket.find({
+            $or: [
+                { ticketNumber: searchRegex },
+                { issueDescription: searchRegex }
+            ]
+        }).select('ticketNumber issueDescription ticketStatus priority').limit(10);
+
+        res.status(200).json(tickets);
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
+/**
+ * @desc    Update a ticket's status and priority
+ * @route   PUT /api/repair-tickets/:id/status
+ * @access  Private
+ */
+export const updateTicketStatus = async (req, res) => {
+    try {
+        const { status, priority } = req.body;
+        if (!status || !priority) {
+            return res.status(400).json({ message: 'Both status and priority are required.' });
+        }
+
+        const ticket = await RepairTicket.findByIdAndUpdate(
+            req.params.id,
+            { ticketStatus: status, priority: priority },
+            { new: true, runValidators: true }
+        );
+
+        if (!ticket) {
+            return res.status(404).json({ message: 'Ticket not found' });
+        }
+
+        res.status(200).json(ticket);
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating ticket', error: error.message });
+    }
+};

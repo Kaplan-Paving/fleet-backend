@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema({
     clockOut: { type: Date },  // When current or last shift ended
 
     // Historical logs (date-based)
+    lastSeen: { type: Date },
     clockLogs: [clockSchema]
 }, {
     timestamps: true

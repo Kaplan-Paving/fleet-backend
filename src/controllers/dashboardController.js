@@ -3,6 +3,40 @@ import RepairTicket from '../models/RepairTicket.js';
 import WorkOrder from '../models/WorkOrder.js';
 import Reading from '../models/Reading.js';
 import AuditTrail from '../models/AuditTrail.js';
+import User from '../models/User.js';
+import { subMonths, startOfMonth, endOfMonth, format } from 'date-fns';
+/**
+ * @desc    Get statistics about users (total and active)
+ * @route   GET /api/dashboard/user-stats
+ * @access  Private
+ */
+export const getUserStats = async (req, res) => {
+    try {
+        // Get the total count of all users in the database
+        const totalUsers = await User.countDocuments();
+
+        // Define "active" as having been seen in the last 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+        // Count users whose 'lastSeen' timestamp is more recent than 5 minutes ago
+        const activeUsers = await User.countDocuments({
+            lastSeen: { $gte: fiveMinutesAgo }
+        });
+
+        // Send the stats back as a JSON object
+        res.status(200).json({
+            totalUsers,
+            activeUsers
+        });
+    } catch (error) {
+        console.error('Error fetching user stats:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
+
+
+
 
 export const getDashboardStats = async (req, res) => {
     try {
@@ -226,5 +260,61 @@ export const getDashboardNotifications = async (req, res) => {
     } catch (err) {
         console.error('Error fetching dashboard notifications:', err);
         res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+
+/**
+ * @desc    Get lifecycle data (repair frequency, costs) for a specific asset
+ * @route   GET /api/dashboard/fleet-lifecycle?kaplanUnitNo=...
+ * @access  Private
+ */
+export const getFleetLifecycleData = async (req, res) => {
+    try {
+        const { kaplanUnitNo } = req.query;
+        if (!kaplanUnitNo) {
+            return res.status(400).json({ message: 'Kaplan Unit Number is required.' });
+        }
+
+        // --- Chart Data: Repair Frequency ---
+        // Find all tickets for the unit with status "Ready to Deploy" in the last 12 months
+        const twelveMonthsAgo = subMonths(new Date(), 12);
+        const tickets = await RepairTicket.find({
+            kaplanUnitNo,
+            ticketStatus: 'Ready to Deploy',
+            createdAt: { $gte: twelveMonthsAgo }
+        });
+
+        // Group the tickets by month
+        const monthlyData = {};
+        for (let i = 0; i < 12; i++) {
+            const monthName = format(subMonths(new Date(), i), 'MMM');
+            monthlyData[monthName] = 0;
+        }
+
+        tickets.forEach(ticket => {
+            const monthName = format(new Date(ticket.createdAt), 'MMM');
+            if (monthlyData.hasOwnProperty(monthName)) {
+                monthlyData[monthName]++;
+            }
+        });
+
+        const chartData = Object.entries(monthlyData).map(([name, value]) => ({ name, value })).reverse();
+
+        // --- Stat Card Data ---
+        // In a real app, this would be a complex calculation. We'll use mock/simple data for now.
+        const asset = await Asset.findOne({ kaplanUnitNo });
+        const totalAssetValue = asset ? asset.purchaseAmount : 0;
+        const totalRepairCost = 2562; // Placeholder: This would be calculated from related work orders
+
+        res.status(200).json({
+            chartData,
+            totalAssetValue,
+            totalRepairCost
+        });
+
+    } catch (error) {
+        console.error('Error fetching fleet lifecycle data:', error);
+        res.status(500).json({ message: 'Server Error' });
     }
 };

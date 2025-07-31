@@ -17,6 +17,8 @@ import { errorLogger } from './src/middlewares/errorHandler.js';
 import auditTrailRoutes from './src/routes/auditTrailRoutes.js';
 import dashboardRoutes from './src/routes/dashboardRoutes.js';
 import mechanicRoutes from './src/routes/mechanicRoutes.js';
+import { protect } from './src/middlewares/auth.js';
+import { updateLastSeen } from './src/middlewares/activityTracker.js';
 dotenv.config();
 
 const app = express();
@@ -60,7 +62,9 @@ mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB connecte
 // });
 
 app.use(requestLogger);
-app.use('/api/auth', authRoutes);
+
+app.use('/api', protect, updateLastSeen);
+app.use('/apiv1/auth', authRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/readings', readingRoutes);
 app.use('/api/maintenanceThreshold', maintenanceThresholdRoutes);
@@ -70,7 +74,6 @@ app.use('/api/s3', s3Routes);
 app.use('/api/workorders', workOrderRoutes);
 app.use('/api/worklogs', mechanicWorkLogRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
 app.use('/api/audit-trail', auditTrailRoutes);
 app.use('/api/mechanics', mechanicRoutes);
 
