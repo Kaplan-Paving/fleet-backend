@@ -5,33 +5,46 @@ import MaintenanceThreshold from '../models/MaintenanceThreshold.js';
 
 export const createReading = async (req, res) => {
     try {
-        const { kaplanUnitNo, hours, odometer, fuelUpdate } = req.body;
+        const { kaplanUnitNo, hours, odometer, fuelUpdate, user, date, statusUpdate } = req.body;
 
-        // ✅ Check if the Asset exists
+        // Check if the Asset exists
         const asset = await Asset.findOne({ kaplanUnitNo });
         if (!asset) {
-            return res.status(400).json({ error: `Asset with Kaplan Unit #${kaplanUnitNo} does not exist.` });
+            return res.status(404).json({ error: `Asset with Kaplan Unit #${kaplanUnitNo} does not exist.` });
         }
 
-        // ✅ Save reading
-        const reading = new Reading(req.body);
-        await reading.save();
+        const newReadingData = new Reading({
+            kaplanUnitNo,
+            hours,
+            odometer,
+            fuelUpdate,
+            user,
+            date,
+            statusUpdate,
+            assetClass: asset.assetType
+        });
 
-        // ✅ Update latest odometer/hour reading in asset
-        const latest = `${odometer} mi / ${hours} hr`;
-        asset.latestOdometerHourReading = latest;
-        await asset.save();
+        // Save the new reading
+        const savedReading = await newReadingData.save();
 
-        // ✅ Get thresholds by subAssetType
+        // ✅ FIX: Re-fetch the document after saving to ensure it's a clean object
+        const reading = await Reading.findById(savedReading._id);
+
+        // Update latest odometer/hour reading in asset
+        if (odometer || hours) {
+            asset.latestOdometerHourReading = `${odometer || 'N/A'} mi / ${hours || 'N/A'} hr`;
+            await asset.save();
+        }
+
+        // Get thresholds by subAssetType
         const { subAssetType } = asset;
         const threshold = await MaintenanceThreshold.findOne({ subAssetType });
 
         const alerts = [];
 
         if (threshold) {
-            // Extract number from strings like "30 Hr." or "6 months"
             const extractNumber = (str) => {
-                const match = str.match(/[\d.]+/);
+                const match = str ? String(str).match(/[\d.]+/) : null;
                 return match ? parseFloat(match[0]) : 0;
             };
 
@@ -39,21 +52,23 @@ export const createReading = async (req, res) => {
             const milesThreshold = threshold.milesThreshold;
             const gphThreshold = threshold.gph;
 
-            if (hours >= engineThreshold) {
+            if (hours && hours >= engineThreshold) {
                 alerts.push({ type: 'Engine_threshold', level: 'Normal' });
             }
 
-            if (parseInt(odometer) >= milesThreshold) {
+            if (odometer && parseInt(odometer) >= milesThreshold) {
                 alerts.push({ type: 'Miles_threshold', level: 'High' });
             }
 
-            const gphActual = parseFloat(fuelUpdate) / (parseFloat(hours) || 1);
-            if (gphActual >= gphThreshold) {
-                alerts.push({ type: 'GPH_threshold', level: 'Critical' });
+            if (fuelUpdate && hours) {
+                const gphActual = parseFloat(fuelUpdate) / (parseFloat(hours) || 1);
+                if (gphActual >= gphThreshold) {
+                    alerts.push({ type: 'GPH_threshold', level: 'Critical' });
+                }
             }
         }
 
-        // ✅ Create alerts if any
+        // Create alerts if any
         for (const alert of alerts) {
             await Alert.create({
                 kaplanUnitNo,

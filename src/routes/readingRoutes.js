@@ -9,8 +9,8 @@ import { protect } from '../middlewares/auth.js';
 const router = express.Router();
 
 // You can restrict with permissions if needed
-router.post('/', protect, checkPermission(['create_reading']), createReading);
-router.get('/', protect, checkPermission(['view_reading']), getAllReadings);
-router.get('/:kaplanUnitNo', protect, checkPermission(['view_reading']), getReadingsByKaplanUnit);
+router.post('/', createReading);
+router.get('/', getAllReadings);
+router.get('/:kaplanUnitNo', getReadingsByKaplanUnit);
 
 export default router;

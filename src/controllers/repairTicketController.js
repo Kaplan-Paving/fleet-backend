@@ -1,88 +1,25 @@
 import RepairTicket from '../models/RepairTicket.js';
 import WorkOrder from '../models/WorkOrder.js';
-// --- (UPDATED) Create a new repair ticket ---
+import { createTicketAndWorkOrder } from '../services/ticketService.js'; // 1. Import the new service
+// Note: You no longer need to import WorkOrder here directly
+
 /**
- * @desc    Create a new repair ticket and a corresponding work order.
- * If a work order for the Kaplan Unit already exists, the new
- * work order will reuse the existing workOrderId for grouping.
- * @route   POST /api/tickets (or a dedicated route)
+ * @desc    Create a new repair ticket and its work order via the ticket service.
+ * @route   POST /api/repair-tickets
  * @access  Private
  */
 export const createRepairTicket = async (req, res) => {
-    const { kaplanUnitNo, issueDescription, reason, priority, ticketStatus } = req.body;
+    const { kaplanUnitNo, issueDescription, reason, priority } = req.body;
 
     if (!kaplanUnitNo || !issueDescription || !reason || !priority) {
-        return res.status(400).json({ message: 'Please fill all required fields: Kaplan Unit, Issue Description, Reason, and Priority.' });
+        return res.status(400).json({ message: 'Please fill all required fields.' });
     }
 
     try {
-        // --- Part A: Create the Repair Ticket ---
-        const today = new Date();
-        const datePart = today.toISOString().split('T')[0].replace(/-/g, '');
-        const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
-        const todayCount = await RepairTicket.countDocuments({ createdAt: { $gte: startOfDay } });
-        const countPart = (todayCount + 1).toString().padStart(4, '0');
-        const kaplanShort = kaplanUnitNo.slice(-4).toUpperCase().padStart(4, 'X');
-        const ticketNumber = `TCKT-${datePart}-${kaplanShort}-${countPart}`;
+        // 2. Call the reusable service with the request body and files
+        const savedTicket = await createTicketAndWorkOrder({ ...req.body, attachments: req.files });
 
-        const highestPriorityTicket = await RepairTicket.findOne().sort({ priorityRank: -1 });
-        const nextPriorityRank = highestPriorityTicket ? highestPriorityTicket.priorityRank + 1 : 1;
-
-        const attachments = req.files?.map(file => ({
-            url: file.location,
-            key: file.key,
-            originalName: file.originalname,
-            mimetype: file.mimetype,
-            size: file.size
-        })) || [];
-
-        const newTicket = new RepairTicket({
-            ticketNumber,
-            priorityRank: nextPriorityRank,
-            kaplanUnitNo,
-            issueDescription,
-            ticketStatus: ticketStatus || 'Under Diagnosis',
-            reason,
-            priority,
-            attachments,
-            date: new Date()
-        });
-        const savedTicket = await newTicket.save();
-
-        // --- Part B: Create a NEW Work Order, reusing workOrderId if applicable ---
-        let workOrderIdToUse;
-
-        // Find an existing work order for the same unit to copy its ID
-        const existingWorkOrder = await WorkOrder.findOne({ kaplanUnitNo: savedTicket.kaplanUnitNo });
-
-        if (existingWorkOrder && existingWorkOrder.workOrderId) {
-            // If one exists, reuse its workOrderId for grouping
-            workOrderIdToUse = existingWorkOrder.workOrderId;
-        } else {
-            // If none exists, generate a new workOrderId
-            const highestWorkOrder = await WorkOrder.findOne().sort({ workOrderId: -1 });
-            workOrderIdToUse = highestWorkOrder ? (highestWorkOrder.workOrderId || 0) + 1 : 1001; // Start from 1001
-        }
-
-        // Determine the next priority rank for the new work order
-        const highestRank = await WorkOrder.findOne().sort({ priorityRank: -1 });
-        const nextWorkOrderRank = highestRank ? highestRank.priorityRank + 1 : 1;
-
-        // Create the new work order document
-        const newWorkOrder = new WorkOrder({
-            // ✅ FIX: Changed 'ticketNumber' to the correct field name 'workOrderId'
-            workOrderId: workOrderIdToUse,
-            kaplanUnitNo: savedTicket.kaplanUnitNo,
-            description: savedTicket.issueDescription,
-            priority: savedTicket.priority,
-            priorityRank: nextWorkOrderRank,
-            ticketIds: [savedTicket._id] // Link only the new ticket
-        });
-        await newWorkOrder.save();
-
-        // Respond with the successfully created ticket
         res.status(201).json(savedTicket);
-
     } catch (error) {
         console.error('Failed to create repair ticket and/or work order:', error);
         if (error.name === 'ValidationError') {
