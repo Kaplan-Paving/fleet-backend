@@ -1,8 +1,8 @@
 import express from 'express';
-import { register, login, logout } from '../controllers/authController.js';
+import { register, login, logout, createUserWithGeneratedPassword, getUsers, updateUser } from '../controllers/authController.js';
 import { authorizeRoles } from '../middlewares/auth.js';
 import { protect } from '../middlewares/auth.js';
-import { searchUsers, updateUserPayrate, resetPassword } from '../controllers/authController.js';
+import { searchUsers, updateUserPayrate, resetPassword, } from '../controllers/authController.js';
 import dotenv from 'dotenv';
 dotenv.config();
 const router = express.Router();
@@ -29,5 +29,8 @@ router.get('/me', protect, (req, res) => {
     // So we can safely send it back.
     res.status(200).json({ user: req.user });
 });
+router.post('/create', createUserWithGeneratedPassword);
+router.get('/users', getUsers)
+router.put('/user/:id', updateUser)
 
 export default router;

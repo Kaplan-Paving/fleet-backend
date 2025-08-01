@@ -2,7 +2,78 @@ import User from '../models/User.js'; // Adjust the path to your User model
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import crypto from 'crypto'; // Node.js module for generating random data
 dotenv.config();
+
+
+
+
+/**
+ * @desc    Get all users
+ * @route   GET /api/users
+ * @access  Private (Admin)
+ */
+export const getUsers = async (req, res) => {
+    try {
+        // Fetch all users but exclude their passwords from the response
+        const users = await User.find().select('-password');
+        res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
+/**
+ * @desc    Create a new user, generate a random password, and send it back.
+ * @route   POST /api/users/create
+ * @access  Private (Admin)
+ */
+export const createUserWithGeneratedPassword = async (req, res) => {
+    // 1. Get the form data from the AddUpdateUserCard
+    const { name, identificationNumber, email, contact } = req.body;
+
+    // 2. Validate the required fields from the frontend form
+    if (!name || !identificationNumber || !email) {
+        return res.status(400).json({ message: 'Name, Identification Number, and Email are required.' });
+    }
+
+    try {
+        // 3. Check if a user with the same email or userId already exists
+        const userExists = await User.findOne({ $or: [{ email }, { userId: identificationNumber }] });
+        if (userExists) {
+            return res.status(409).json({ message: 'User with this email or ID already exists.' });
+        }
+
+        // 4. Generate a secure random password
+        const generatedPassword = crypto.randomBytes(8).toString('hex'); // Creates a 16-character hex string
+
+        // 5. Hash the generated password before saving
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(generatedPassword, salt);
+
+        // 6. Create and save the new user
+        const newUser = new User({
+            name,
+            userId: identificationNumber,
+            email,
+            contactNo: contact,
+            password: hashedPassword,
+            // You can set default role, permissions, etc. here if needed
+        });
+        await newUser.save();
+
+        // 7. Send a success response that INCLUDES the generated password
+        // The frontend will use this password for the CSV download.
+        res.status(201).json({
+            message: `User ${name} created successfully.`,
+            generatedPassword: generatedPassword // This is crucial for the download feature
+        });
+
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
 
 /**
  * @desc    Register (create) a new user
@@ -61,13 +132,14 @@ export const register = async (req, res) => {
     }
 };
 
+
+
 /**
- * @desc    Authenticate a user and get a token
+ * @desc    Authenticate a user and return the COMPLETE user object
  * @route   POST /api/auth/login
  * @access  Public
  */
 export const login = async (req, res) => {
-    // 1. Allow login with either email or userId
     const { loginId, password } = req.body;
 
     if (!loginId || !password) {
@@ -75,7 +147,7 @@ export const login = async (req, res) => {
     }
 
     try {
-        // 2. Find the user by either their email or their userId
+        // Find the user by either their email or their userId
         const user = await User.findOne({
             $or: [{ email: loginId }, { userId: loginId }]
         });
@@ -84,44 +156,48 @@ export const login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
-        // 3. Compare the provided password with the stored hashed password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
-        // 4. Create a JWT with the user's MongoDB _id
         const token = jwt.sign(
-            { userId: user._id, role: user.role }, // Use user._id for consistency
+            { userId: user._id, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: '1d' } // Token expires in 1 day
+            { expiresIn: '1d' }
         );
 
-        // 5. Set the token in a secure, HttpOnly cookie (BEST PRACTICE)
         res.cookie('token', token, {
-            httpOnly: true, // Prevents client-side JS from accessing the cookie
+            httpOnly: true,
             secure: true,
             sameSite: 'None',
             partitioned: true,
-            path: '/',// Helps prevent CSRF attacks
-            maxAge: 24 * 60 * 60 * 1000 // 1 day in milliseconds
+            path: '/',
+            maxAge: 24 * 60 * 60 * 1000
         });
 
-        // 6. Send back public user data in the response body
+        // ✅ FIX: Send back a clean user object without the password.
+        // This ensures the frontend receives the full user profile, including permissions,
+        // immediately after logging in.
+        const userForClient = {
+            _id: user._id,
+            name: user.name,
+            userId: user.userId,
+            email: user.email,
+            role: user.role,
+            permissions: user.permissions, // Make sure to include this!
+            // ... include any other non-sensitive fields
+        };
+
         res.status(200).json({
-            user: {
-                _id: user._id,
-                name: user.name,
-                userId: user.userId,
-                email: user.email,
-                role: user.role
-            }
+            user: userForClient
         });
 
     } catch (error) {
         res.status(500).json({ message: 'Server error during login.', error: error.message });
     }
 };
+
 
 
 export const logout = (req, res) => {
@@ -236,5 +312,67 @@ export const resetPassword = async (req, res) => {
     } catch (error) {
         console.error('Error resetting password:', error);
         res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
+/**
+ * @desc    Update a user's details. It assigns role-based permissions
+ * but allows them to be overridden by manually set permissions.
+ * @route   PUT /api/users/:id
+ * @access  Private (Admin)
+ */
+export const updateUser = async (req, res) => {
+    try {
+        const updateData = req.body;
+        console.log("this is hit", updateData)
+
+        // 1. If a role is specified, determine the base permissions for that role.
+        if (updateData.role) {
+            let rolePermissions = {
+                'Dashboard': { view: true, edit: false },
+            };
+
+            switch (updateData.role) {
+                case 'admin':
+                case 'super_admin':
+                    rolePermissions = {
+                        'Dashboard': { view: true, edit: true },
+                        'Fleet Assets': { view: true, edit: true },
+                        'Repair Ticketing': { view: true, edit: true },
+                        'Maintenance': { view: true, edit: true },
+                        'Operators Module': { view: true, edit: true },
+                        'Report': { view: true, edit: true },
+                        'Admin Control': { view: true, edit: true },
+                    };
+                    break;
+                case 'operator':
+                    rolePermissions['Repair Ticketing'] = { view: true, edit: true };
+                    rolePermissions['Operators Module'] = { view: true, edit: true };
+                    break;
+                case 'mechanic':
+                    rolePermissions['Maintenance'] = { view: true, edit: true };
+                    rolePermissions['Repair Ticketing'] = { view: true, edit: false };
+                    break;
+                default:
+                    break;
+            }
+
+            // 2. Merge the role-based permissions with any manually specified permissions from the frontend.
+            // The manually specified permissions will take precedence.
+            updateData.permissions = { ...rolePermissions, ...updateData.permissions };
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.params.id,
+            updateData,
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.status(200).json(updatedUser);
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating user', error: error.message });
     }
 };

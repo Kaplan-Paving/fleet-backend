@@ -39,27 +39,14 @@ const corsOptions = {
         }
         return callback(null, true);
     },
-    credentials: true, // This allows the server to accept cookies from the browser
+    credentials: true,
 };
 
 
-// --- MIDDLEWARE SETUP ---
 app.use(cors(corsOptions));
 
 app.use(cookieParser());
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('MongoDB connected'));
-
-
-// app.use((req, res, next) => {
-//     // Example: set req.user from a real decoded token in production
-//     req.user = {
-//         _id: new mongoose.Types.ObjectId('64bcb3f8b8cfc0b7a4e4a4a4'),
-//         name: "John Doe",
-//         role: 'admin',
-//         permissions: ['admin', 'create_asset', 'view_asset', 'edit_asset', 'delete_asset', "create_reading", "view_reading"]
-//     };
-//     next();
-// });
 
 app.use(requestLogger);
 

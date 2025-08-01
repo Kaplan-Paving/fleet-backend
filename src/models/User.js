@@ -9,8 +9,7 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: {
         type: String,
-        enum: ['super_admin', 'admin', 'driver', 'mechanic'],
-        default: 'driver'
+        enum: ['admin', 'mechanic', 'operator'],
     },
     // ✅ New field added here
     profilePicture: {
@@ -18,7 +17,14 @@ const userSchema = new mongoose.Schema({
         default: 'https://placehold.co/400x400/EFEFEF/AAAAAA&text=No+Image' // Default placeholder image
     },
     payRate: { type: Number },
-    permissions: [{ type: String }],
+    // ✅ UPDATED: A more structured way to store permissions
+    permissions: {
+        type: Map,
+        of: {
+            view: { type: Boolean, default: false },
+            edit: { type: Boolean, default: false }
+        }
+    },
 
     // Latest or active shift time (not daily)
     clockIn: { type: Date },   // When current or last shift started
