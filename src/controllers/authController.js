@@ -30,6 +30,8 @@ export const getUsers = async (req, res) => {
  */
 export const createUserWithGeneratedPassword = async (req, res) => {
     // 1. Get the form data from the AddUpdateUserCard
+
+
     const { name, identificationNumber, email, contact } = req.body;
 
     // 2. Validate the required fields from the frontend form
@@ -58,8 +60,11 @@ export const createUserWithGeneratedPassword = async (req, res) => {
             email,
             contactNo: contact,
             password: hashedPassword,
+
             // You can set default role, permissions, etc. here if needed
         });
+
+
         await newUser.save();
 
         // 7. Send a success response that INCLUDES the generated password
