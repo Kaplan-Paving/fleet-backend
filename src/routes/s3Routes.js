@@ -2,6 +2,9 @@
 import express from 'express';
 import { generateUploadUrl, generateDownloadUrl } from '../services/s3Service.js';
 import { protect } from '../middlewares/auth.js';
+import { checkEditPermission } from '../middlewares/checkEditPermission.js';
+
+
 const router = express.Router();
 
 // Request pre-signed upload URL

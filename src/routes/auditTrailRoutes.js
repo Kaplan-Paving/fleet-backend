@@ -2,6 +2,9 @@
 import express from 'express';
 import AuditTrail from '../models/AuditTrail.js';
 import { protect } from '../middlewares/auth.js';
+import { checkEditPermission } from '../middlewares/checkEditPermission.js';
+
+
 const router = express.Router();
 
 // GET /api/audit-trail?user=xyz&limit=20

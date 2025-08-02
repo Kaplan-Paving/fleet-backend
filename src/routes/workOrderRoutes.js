@@ -7,10 +7,13 @@ import {
     getWorkOrders
 } from '../controllers/workOrderController.js';
 import { protect } from '../middlewares/auth.js';
+import { checkEditPermission } from '../middlewares/checkEditPermission.js';
+
+
 const router = express.Router();
 
-router.get('/', getWorkOrders)
-router.post('/', createWorkOrder);        // Create
+router.get('/', protect, getWorkOrders)
+router.post('/', protect, createWorkOrder);        // Create
 router.put('/:id', protect, updateWorkOrder);      // Update
 router.delete('/:id', protect, deleteWorkOrder);   // Delete
 

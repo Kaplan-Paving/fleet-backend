@@ -127,63 +127,77 @@ export const getTopAssetsByRepairs = async (req, res) => {
 };
 
 
+
+/**
+ * @desc    Get top 10 fuel inefficient units
+ * @route   GET /api/dashboard/fuel-inefficient
+ * @access  Private
+ */
 export const getTopFuelInefficientUnits = async (req, res) => {
     try {
-        // Get latest reading per Kaplan Unit
+        // Helper function within the aggregation to safely parse numbers from strings like "200 Gallons"
+        const safeNumericConversion = (field) => ({
+            $let: {
+                vars: {
+                    // Find the first sequence of digits (and optional decimal point) in the string
+                    numericPart: { $regexFind: { input: { $toString: field }, regex: /[\d.]+/ } }
+                },
+                // Convert the matched part to a double, or return 0 if no number was found
+                in: { $toDouble: { $ifNull: ["$$numericPart.match", "0"] } }
+            }
+        });
+
+        // Step 1: Aggregate latest readings and calculate MPG/GPH safely
         const latestReadings = await Reading.aggregate([
-            {
-                $sort: { date: -1 }
-            },
+            { $sort: { date: -1 } },
             {
                 $group: {
                     _id: "$kaplanUnitNo",
                     latestReading: { $first: "$$ROOT" }
                 }
             },
-            {
-                $replaceRoot: { newRoot: "$latestReading" }
-            },
+            { $replaceRoot: { newRoot: "$latestReading" } },
             {
                 $project: {
                     kaplanUnitNo: 1,
                     assetClass: 1,
+                    // ✅ FIX: Use the safe conversion for all numeric fields
                     mpg: {
                         $cond: [
-                            { $gt: ["$fuelUpdate", 0] },
-                            { $divide: ["$odometer", "$fuelUpdate"] },
+                            { $gt: [safeNumericConversion("$fuelUpdate"), 0] },
+                            { $divide: [safeNumericConversion("$odometer"), safeNumericConversion("$fuelUpdate")] },
                             null
                         ]
                     },
                     gph: {
                         $cond: [
-                            { $gt: ["$hours", 0] },
-                            { $divide: ["$fuelUpdate", "$hours"] },
+                            { $gt: [safeNumericConversion("$hours"), 0] },
+                            { $divide: [safeNumericConversion("$fuelUpdate"), safeNumericConversion("$hours")] },
                             null
                         ]
                     }
                 }
             },
-            {
-                $sort: { mpg: 1 } // ascending order => lowest MPG
-            },
+            { $sort: { mpg: 1 } }, // Sort by lowest MPG to find most inefficient
             { $limit: 10 }
         ]);
 
-        // Calculate fleet-wide averages
+        // Step 2: Calculate fleet-wide averages safely
         const fleetAvg = await Reading.aggregate([
             {
                 $project: {
+                    // ✅ FIX: Use the safe conversion here as well
                     mpg: {
                         $cond: [
-                            { $gt: ["$fuelUpdate", 0] },
-                            { $divide: ["$odometer", "$fuelUpdate"] },
+                            { $gt: [safeNumericConversion("$fuelUpdate"), 0] },
+                            { $divide: [safeNumericConversion("$odometer"), safeNumericConversion("$fuelUpdate")] },
                             null
                         ]
                     },
                     gph: {
                         $cond: [
-                            { $gt: ["$hours", 0] },
-                            { $divide: ["$fuelUpdate", "$hours"] },
+                            { $gt: [safeNumericConversion("$hours"), 0] },
+                            { $divide: [safeNumericConversion("$fuelUpdate"), safeNumericConversion("$hours")] },
                             null
                         ]
                     }
@@ -200,24 +214,27 @@ export const getTopFuelInefficientUnits = async (req, res) => {
 
         const avgFleet = fleetAvg[0] || { avgMPG: 0, avgGPH: 0 };
 
-        const formatted = latestReadings.map(item => ({
-            kaplanUnitNo: item.kaplanUnitNo,
-            assetType: item.assetClass,
-            subType: item.subType || '', // if stored elsewhere, adjust
-            mpg: Number(item.mpg?.toFixed(2)) || 0,
-            gph: Number(item.gph?.toFixed(2)) || 0,
-            avgFleetMPG: Number(avgFleet.avgMPG?.toFixed(2)) || 0,
-            avgFleetGPH: Number(avgFleet.avgGPH?.toFixed(2)) || 0,
+        // Step 3: Enrich with asset data and format for frontend
+        const topInefficientUnits = await Promise.all(latestReadings.map(async (item) => {
+            const asset = await Asset.findOne({ kaplanUnitNo: item.kaplanUnitNo }).select('assetType subAssetType');
+            return {
+                kaplanUnit: item.kaplanUnitNo,
+                assetType: asset?.assetType || 'N/A',
+                subType: asset?.subAssetType || 'N/A',
+                mpg: Number(item.mpg?.toFixed(2)) || 0,
+                gph: Number(item.gph?.toFixed(2)) || 0,
+                avgFleetMPG: Number(avgFleet.avgMPG?.toFixed(2)) || 0,
+                avgFleetGPH: Number(avgFleet.avgGPH?.toFixed(2)) || 0,
+            };
         }));
 
-        res.status(200).json({ topFuelInefficientUnits: formatted });
+        res.status(200).json(topInefficientUnits);
 
     } catch (error) {
         console.error("Fuel Inefficiency Error:", error);
         res.status(500).json({ error: "Failed to fetch fuel inefficient units" });
     }
 };
-
 
 import moment from 'moment';
 
@@ -318,3 +335,31 @@ export const getFleetLifecycleData = async (req, res) => {
         res.status(500).json({ message: 'Server Error' });
     }
 };
+
+
+
+/**
+ * @desc    Get an overview of tickets by a specific priority
+ * @route   GET /api/dashboard/ticket-overview?priority=...
+ * @access  Private
+ */
+export const getTicketOverview = async (req, res) => {
+    try {
+        const { priority } = req.query;
+
+        if (!priority) {
+            return res.status(400).json({ message: 'Priority is required.' });
+        }
+
+        // Find the top 5 tickets matching the specified priority, sorted by the newest first
+        const tickets = await RepairTicket.find({ priority })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .select('ticketNumber issueDescription'); // Only select the fields we need
+
+        res.status(200).json(tickets);
+    } catch (error) {
+        console.error('Error fetching ticket overview:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+}
